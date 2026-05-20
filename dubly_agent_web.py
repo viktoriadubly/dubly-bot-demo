@@ -991,12 +991,24 @@ Beispiel-Formulierung (anpassen je SLA):
    sich noch heute bei dir. Falls du bis morgen Mittag nichts hoerst,
    antworte mir hier mit der Ticket-ID — dann schubs ich nach."
 
-# HELP-CENTER-LINKS NUTZEN
-Wenn search_knowledge_base passende Treffer geliefert hat, bau die
-URL natuerlich ein Mal in deine Antwort ein -- entweder am Ende
-("Mehr Details: <URL>") oder verlinkt im Text. Nicht ueberbordend,
-ein Link pro Antwort reicht. Das gibt dem User die Moeglichkeit
-nachzulesen ohne dass es klingt wie "lies's halt selbst".
+# HELP-CENTER-LINK IST PFLICHT WENN ARTIKEL PASST (wichtig)
+Wann immer search_knowledge_base einen passenden Artikel geliefert hat
+(Score >= 0.55) -- IMMER einen Hinweis in deine Antwort einbauen, z.B.
+ans Ende "Mehr dazu: [Artikel-Titel](URL)" oder einen Satz wie "Hier
+findest du Schritt fuer Schritt mehr: [URL]". Der User soll selbst
+nachlesen koennen wenn er tiefer einsteigen will.
+
+Stil-Vorgaben:
+- Markdown-Link-Format, nicht roher URL-Dump
+- Linktitel beschreibt was er findet ("Export-Anleitung", "Plan-
+  Uebersicht"), nicht generisch wie "Klick hier" oder "Quelle"
+- Maximal 1 Link pro Antwort
+- Wenn mehrere Artikel passen, nimm den relevantesten
+
+Schlecht: "Quelle: https://support.dubly.ai/123"
+Schlecht: "Klick hier"
+Gut: "Mehr dazu in der [SRT-Export-Anleitung](https://support.dubly.ai/...)"
+Gut: "Detaillierte Schritte findest du [hier in unserem Help Center](URL)."
 
 # BILDER IN ANTWORTEN
 Wenn ein Help-Center-Chunk eine Bild-URL enthaelt (z.B. .png, .jpg in
@@ -1410,8 +1422,35 @@ st.markdown(f"""
     line-height: 1.5;
   }}
 
-  /* ---------- Feedback Buttons ---------- */
-  .feedback-section {{ margin-top: 10px; }}
+  /* ---------- Action-Chip-Buttons (unter Bot-Antworten) ---------- */
+  /* Alle Buttons in den Action-Row Spalten kompakter, pill-shaped, dezent */
+  div[data-testid="stChatMessage"] .stButton > button {{
+    padding: 5px 12px !important;
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+    line-height: 1.2 !important;
+    min-height: 30px !important;
+    border-radius: 8px !important;
+    border: 1px solid {DUBLY_BORDER} !important;
+    background: {DUBLY_CARD} !important;
+    color: {DUBLY_MUTED} !important;
+    transition: all 0.15s ease;
+    white-space: nowrap !important;
+  }}
+  div[data-testid="stChatMessage"] .stButton > button:hover:not(:disabled) {{
+    border-color: {DUBLY_ACCENT} !important;
+    color: {DUBLY_ACCENT} !important;
+    background: {DUBLY_ACCENT_SOFT} !important;
+  }}
+  div[data-testid="stChatMessage"] .stButton > button:disabled {{
+    opacity: 0.45;
+    color: {DUBLY_SUBTLE} !important;
+  }}
+  /* Disabled-State von gewaehlter Rating-Button: leicht hervorgehoben */
+  div[data-testid="stChatMessage"] .stButton > button[disabled]:not([data-baseweb]) {{
+    background: #F4F4F6 !important;
+    border-color: {DUBLY_BORDER} !important;
+  }}
 
   /* ---------- General Buttons ---------- */
   .stButton > button {{
@@ -1641,62 +1680,70 @@ def _render_msg(i: int, msg: dict) -> None:
                     args_str = ", ".join(f"{k}={v!r}" for k, v in t["args"].items())
                     st.markdown(f'<div class="tool-line"><strong>{t["tool"]}</strong>({args_str})</div>', unsafe_allow_html=True)
                     st.code(t["result_preview"], language="json")
-        # Feedback (nur fuer assistant messages)
+        # Action-Row (nur fuer Bot-Antworten): Ratings + Follow-up-Chips
         if role == "assistant":
             already = st.session_state.feedback_given.get(i)
-            cols = st.columns([1, 1, 1, 6])
+            # Eine Zeile mit 5 kompakten Chips + Spacer
+            cols = st.columns([1, 1, 1, 1.6, 1.4, 5], gap="small")
             with cols[0]:
-                if st.button("👍", key=f"fb_up_{i}", disabled=already is not None):
+                if st.button("👍", key=f"fb_up_{i}",
+                             disabled=already is not None,
+                             help="Hilfreiche Antwort"):
                     st.session_state.feedback_given[i] = "up"
                     st.session_state.feedback_open[i] = True
                     st.rerun()
             with cols[1]:
-                if st.button("👎", key=f"fb_down_{i}", disabled=already is not None):
+                if st.button("👎", key=f"fb_down_{i}",
+                             disabled=already is not None,
+                             help="Nicht hilfreich"):
                     st.session_state.feedback_given[i] = "down"
                     st.session_state.feedback_open[i] = True
                     st.rerun()
             with cols[2]:
-                if st.button("🐛", key=f"fb_bug_{i}", disabled=already is not None):
+                if st.button("🐛", key=f"fb_bug_{i}",
+                             disabled=already is not None,
+                             help="Fehler melden"):
                     st.session_state.feedback_given[i] = "bug"
                     st.session_state.feedback_open[i] = True
                     st.rerun()
             with cols[3]:
-                if already:
-                    label = {"up": "👍 hilfreich", "down": "👎 nicht hilfreich", "bug": "🐛 Fehler"}[already]
-                    st.caption(f"Feedback: {label}")
-            if st.session_state.feedback_open.get(i, False):
-                rating = st.session_state.feedback_given.get(i, "")
-                comment = st.text_area(
-                    "Kommentar (optional)",
-                    key=f"fb_comment_{i}",
-                    placeholder="Was war gut/schlecht? Was hat gefehlt? Was war falsch?",
-                    height=68,
-                )
-                if st.button("Feedback senden", key=f"fb_send_{i}", type="primary"):
-                    save_feedback(
-                        message_id=str(i),
-                        rating=rating,
-                        comment=comment or "",
-                        transcript=[m for m in st.session_state.messages if isinstance(m.get("content"), str)],
-                    )
-                    st.session_state.feedback_open[i] = False
-                    st.toast("Danke für dein Feedback!")
-                    st.rerun()
-            # Follow-up Quick-Action-Chips (Mensch holen, Mehr Details)
-            qcols = st.columns([1, 1, 5])
-            with qcols[0]:
-                if st.button("💬 Mensch holen", key=f"qa_human_{i}", help="Bot eskaliert direkt an dein Team"):
-                    st.session_state.starter_clicked = (
-                        "Ich möchte mit einem Menschen sprechen."
-                    )
-                    st.rerun()
-            with qcols[1]:
-                if st.button("🔍 Mehr Details", key=f"qa_more_{i}", help="Bot erklärt ausführlicher"):
+                if st.button("Mehr Details", key=f"qa_more_{i}",
+                             help="Bot erklärt ausführlicher"):
                     st.session_state.starter_clicked = (
                         "Kannst du das nochmal etwas ausführlicher erklären, "
                         "Schritt für Schritt?"
                     )
                     st.rerun()
+            with cols[4]:
+                if st.button("Mensch holen", key=f"qa_human_{i}",
+                             help="Direkt an dein Team weiterleiten"):
+                    st.session_state.starter_clicked = (
+                        "Ich möchte mit einem Menschen sprechen."
+                    )
+                    st.rerun()
+
+            # Inline-Feedback-Form unter den Buttons (falls Rating geklickt)
+            if st.session_state.feedback_open.get(i, False):
+                rating = st.session_state.feedback_given.get(i, "")
+                comment = st.text_area(
+                    "Was war gut/schlecht? (optional)",
+                    key=f"fb_comment_{i}",
+                    placeholder="Was hat gefehlt? Was war falsch?",
+                    height=68,
+                    label_visibility="collapsed",
+                )
+                fb_cols = st.columns([2, 5])
+                with fb_cols[0]:
+                    if st.button("Feedback senden", key=f"fb_send_{i}", type="primary"):
+                        save_feedback(
+                            message_id=str(i),
+                            rating=rating,
+                            comment=comment or "",
+                            transcript=[m for m in st.session_state.messages if isinstance(m.get("content"), str)],
+                        )
+                        st.session_state.feedback_open[i] = False
+                        st.toast("Danke für dein Feedback!")
+                        st.rerun()
 
 
 # Konfigurations-Check
