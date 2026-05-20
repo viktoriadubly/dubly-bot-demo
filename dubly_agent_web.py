@@ -67,6 +67,12 @@ def _secret(name: str) -> str:
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip() or _secret("ANTHROPIC_API_KEY")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "").strip() or _secret("GEMINI_API_KEY")
 PLAIN_KEY = os.environ.get("PLAIN_API_KEY", "").strip() or _secret("PLAIN_API_KEY")
+NOTION_KEY = os.environ.get("NOTION_API_KEY", "").strip() or _secret("NOTION_API_KEY")
+
+# Notion-Datenbank "Feature Wuensche" (Dubly-internes Kanban)
+NOTION_FEATURE_DB_ID = "35aeb10d-0eec-805f-bb2c-e0ed78aeed50"
+NOTION_API_URL = "https://api.notion.com/v1"
+NOTION_VERSION = "2022-06-28"
 
 CHUNKS_FILE = Path(__file__).parent / "chunks_with_embeddings.json"
 MOCK_DB_FILE = Path(__file__).parent / "mock_customers.json"
@@ -399,6 +405,62 @@ def tool_add_plain_note(args: dict) -> str:
     return _ok({"status": "note_added", "thread_id": tid})
 
 
+def tool_create_feature_request(args: dict) -> str:
+    """Legt eine neue Karte in Dubly's Notion-Board 'Feature Wuensche' an
+    (Status: 'Nicht begonnen'). Brauchen Title + Description."""
+    if not NOTION_KEY:
+        return _err("Notion ist nicht konfiguriert (NOTION_API_KEY fehlt).")
+    title = (args.get("title") or "").strip()
+    description = (args.get("description") or "").strip()
+    if not title:
+        return _err("title fehlt.")
+    if not description:
+        return _err("description fehlt.")
+
+    headers = {
+        "Authorization": f"Bearer {NOTION_KEY}",
+        "Notion-Version": NOTION_VERSION,
+        "Content-Type": "application/json",
+    }
+    # Context-Block fuer den Eintrag: woher kommt der Wunsch
+    context_lines = [
+        f"Aus dem Bot-Chat eingegangen.",
+        f"Session: {_session_id()}",
+        f"Zeit: {dt.datetime.utcnow().isoformat()}Z",
+    ]
+    body_md = description + "\n\n---\n" + "\n".join(context_lines)
+    payload = {
+        "parent": {"database_id": NOTION_FEATURE_DB_ID},
+        "properties": {
+            "Name": {"title": [{"text": {"content": title[:200]}}]},
+            "Status": {"status": {"name": "Nicht begonnen"}},
+        },
+        "children": [
+            {
+                "object": "block", "type": "paragraph",
+                "paragraph": {"rich_text": [{"text": {"content": body_md[:1900]}}]},
+            }
+        ],
+    }
+    try:
+        resp = requests.post(f"{NOTION_API_URL}/pages", headers=headers,
+                              json=payload, timeout=20)
+    except Exception as e:  # noqa: BLE001
+        return _err(f"Verbindungsfehler zu Notion: {e}")
+    if resp.status_code not in (200, 201):
+        return _err(f"Notion-Fehler {resp.status_code}: {resp.text[:300]}")
+    data = resp.json()
+    page_url = data.get("url") or "(kein Link)"
+    page_id = data.get("id") or "?"
+    return _ok({
+        "status": "feature_request_created",
+        "page_id": page_id,
+        "page_url": page_url,
+        "title": title,
+        "column": "Nicht begonnen",
+    })
+
+
 def tool_escalate_to_human(args: dict) -> str:
     if not PLAIN_KEY:
         return _err("Plain nicht konfiguriert.")
@@ -526,6 +588,7 @@ TOOL_HANDLERS = {
     "create_plain_thread": tool_create_plain_thread,
     "add_plain_note": tool_add_plain_note,
     "escalate_to_human": tool_escalate_to_human,
+    "create_feature_request": tool_create_feature_request,
     "grant_test_credits": tool_grant_test_credits,
     "restart_lipsync_job": tool_restart_lipsync_job,
     "apply_credit_bonus": tool_apply_credit_bonus,
@@ -603,6 +666,29 @@ ANTHROPIC_TOOLS = [
             "type": "object",
             "properties": {"thread_id": {"type": "string"}, "body": {"type": "string"}},
             "required": ["thread_id", "body"],
+        },
+    },
+    {
+        "name": "create_feature_request",
+        "description": (
+            "Legt einen Feature-Wunsch des Users als neue Karte in Dubly's "
+            "internem Notion-Kanban 'Feature Wuensche' an (Status: 'Nicht "
+            "begonnen'). NUTZE dieses Tool wenn der User eine konkrete "
+            "Verbesserung/Erweiterung vorschlaegt ('waere toll wenn...', "
+            "'fehlt mir...', 'koennt ihr...', 'wuensche mir...'). "
+            "Title: kurze Zusammenfassung in 3-8 Worten. "
+            "Description: das was der User wortwoertlich gesagt hat, plus "
+            "ggf. Kontext (welcher Plan, welche Sprache, welcher Use-Case). "
+            "NICHT verwenden fuer Bug-Reports (das ist escalate_to_human) "
+            "oder reine Hilfe-Anfragen."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Kurzer Titel, 3-8 Worte"},
+                "description": {"type": "string", "description": "Wortlaut des Users + Kontext"},
+            },
+            "required": ["title", "description"],
         },
     },
     {
@@ -754,10 +840,33 @@ nimm aus list_recent_jobs den passenden raus.
 - Account-Aktionen (loeschen, Plan aendern)
 - Spezifische Bug-Reports die Account-Zugriff brauchen
 
+# FEATURE-WUNSCH (create_feature_request)
+Sobald der User eine Verbesserung/Erweiterung vorschlaegt — Phrasen wie
+"waere cool wenn...", "fehlt mir...", "koennt ihr...", "wuensche mir...",
+"sollte es geben...", "vermisse...", "I wish you had..." — rufst du
+create_feature_request auf. Title: 3-8 Worte. Description: User-Wortlaut
+plus Kontext (Plan/Sprache/Use-Case falls bekannt). Danach bestaetigst du
+dem User in einem Satz: "Ich habe deinen Wunsch ins Produkt-Board
+eingetragen. Das Team schaut da regelmaessig rein."
+
+WICHTIG: Unterscheide zwischen Feature-Wunsch (gehoert ins Notion-Board)
+und Bug-Report (gehoert ueber escalate_to_human ins Plain-Helpdesk).
+- "Eure Software stuerzt ab" -> Bug, escalate_to_human
+- "Es waere cool wenn ihr Arabisch koenntet" -> Feature, create_feature_request
+
 # ACTION-TOOL-REGELN
 1. Action-Tools (grant_test_credits, restart_lipsync_job, apply_credit_bonus) laufen im DEMO-Modus AUTO-APPROVED -- die Web-UI zeigt dem Tester einen "DEMO MODE"-Hinweis. Du musst nicht extra fragen.
 2. Vor dem Tool-Call: ein Satz Ankuendigung (Indikativ, KEIN "darf ich?"). Beispiel: "Ich gebe dir 3 Test-Credits, weil dein erster Test durch unseren Worker-Stau verbraucht wurde."
 3. Nach Tool-Result: knapp bestaetigen. KEINE Filler-Ausrufe wie "Fertig!", "Perfekt!", "Done!", "Super!".
+
+# IMMER FINALE TEXT-ANTWORT (sehr wichtig)
+Jeder Bot-Turn MUSS mit einer Text-Antwort an den User enden -- niemals
+nur mit einem Tool-Aufruf ohne Begleittext. Auch wenn du gerade ein Tool
+ausgefuehrt hast und das Ergebnis fuer dich klar ist: formuliere fuer den
+User in einem Satz was das Ergebnis bedeutet. Beispiel:
+- Schlecht: [escalate_to_human ausgefuehrt, dann Stille]
+- Gut: [escalate_to_human ausgefuehrt] "Ich habe das an unser Team gegeben
+  (Ticket xyz). Sie melden sich heute noch bei dir."
 
 # GATEKEEPER-PRINZIP
 DU entscheidest ob Aktionen gerechtfertigt sind, nicht der User. Bei reiner Bitte "kann ich mehr Test-Credits?" sagst du freundlich NEIN und verweist auf Abo. Nur bei nachvollziehbarem PLATTFORM-Fehler gibst du Kulanz.
@@ -778,11 +887,18 @@ def build_system_prompt() -> str:
 # ---------------------------------------------------------------------------
 def run_turn(conversation: list[dict], user_msg: str) -> tuple[str, list[dict]]:
     """Fuehrt einen User-Turn aus: Anthropic-Call -> ggf. Tool-Loop -> finaler Text.
-    Gibt (final_text, tool_trail) zurueck. tool_trail ist eine Liste von
-    {tool, args, result_preview}-Dicts zur Anzeige in der UI."""
+    Gibt (final_text, tool_trail) zurueck.
+
+    WICHTIG: Anthropic kann in EINER Antwort sowohl Text als auch Tool-Uses
+    zurueckgeben. Wir akkumulieren ALLE Text-Bloecke ueber alle Steps, damit
+    keiner verlorengeht (z.B. 'Ich schaue nach' in Step 1, dann 'Hier ist die
+    Loesung' in Step 2). Falls die finale Step KEINEN Text liefert, fallen
+    wir auf die akkumulierten Texte zurueck.
+    """
     client = get_anthropic()
     messages = conversation + [{"role": "user", "content": user_msg}]
     tool_trail: list[dict] = []
+    text_parts: list[str] = []   # akkumulierte Text-Bloecke ueber alle Steps
 
     for step in range(MAX_TURN_STEPS):
         resp = client.messages.create(
@@ -792,15 +908,25 @@ def run_turn(conversation: list[dict], user_msg: str) -> tuple[str, list[dict]]:
             tools=ANTHROPIC_TOOLS,
             messages=messages,
         )
-        # Antwort entweder Text oder Tool-Use(s)
         assistant_blocks = list(resp.content)
+        step_text = "".join(b.text for b in assistant_blocks if b.type == "text").strip()
+        if step_text:
+            text_parts.append(step_text)
         tool_uses = [b for b in assistant_blocks if b.type == "tool_use"]
+
         if not tool_uses:
-            # Fertig — finaler Text
-            text = "".join(b.text for b in assistant_blocks if b.type == "text").strip()
+            # Final-Step: nimm den frischsten Text wenn vorhanden, sonst
+            # alles bisher Gesammelte zusammenfuegen.
             messages.append({"role": "assistant", "content": assistant_blocks})
-            return text, tool_trail
-        # Tool-Loop: jeden tool_use ausfuehren
+            final = step_text or "\n\n".join(text_parts).strip()
+            if not final:
+                final = (
+                    "Sorry, hier ist mir gerade die Antwort weggerutscht. "
+                    "Stell die Frage gerne nochmal — beim zweiten Mal klappt's oft."
+                )
+            return final, tool_trail
+
+        # Tool-Loop
         messages.append({"role": "assistant", "content": assistant_blocks})
         results = []
         for tu in tool_uses:
@@ -822,8 +948,13 @@ def run_turn(conversation: list[dict], user_msg: str) -> tuple[str, list[dict]]:
             results.append({"type": "tool_result", "tool_use_id": tu.id, "content": result_str})
         messages.append({"role": "user", "content": results})
 
-    # Loop-Limit erreicht
-    return "Ich brauche zu lange — lass mich dich direkt an einen Menschen weiterleiten.", tool_trail
+    # Loop-Limit erreicht: gib das bisher Gesammelte oder einen Hinweis zurueck
+    fallback = "\n\n".join(text_parts).strip()
+    return (
+        fallback
+        or "Ich brauche zu lange für diese Anfrage — magst du sie nochmal kürzer formulieren?",
+        tool_trail,
+    )
 
 
 # ---------------------------------------------------------------------------

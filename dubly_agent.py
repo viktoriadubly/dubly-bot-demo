@@ -87,6 +87,10 @@ except ImportError as e:
 ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 PLAIN_KEY = os.environ.get("PLAIN_API_KEY", "").strip()  # optional
+NOTION_KEY = os.environ.get("NOTION_API_KEY", "").strip()  # optional
+NOTION_FEATURE_DB_ID = "35aeb10d-0eec-805f-bb2c-e0ed78aeed50"
+NOTION_API_URL = "https://api.notion.com/v1"
+NOTION_VERSION = "2022-06-28"
 
 if not ANTHROPIC_KEY:
     print("[FEHLER] ANTHROPIC_API_KEY fehlt in .env")
@@ -550,6 +554,63 @@ async def add_plain_note(args: dict) -> dict:
 
 
 @tool(
+    "create_feature_request",
+    "Legt einen Feature-Wunsch des Users als neue Karte in Dubly's "
+    "internem Notion-Kanban 'Feature Wuensche' an (Status: 'Nicht "
+    "begonnen'). NUTZE wenn der User eine konkrete Verbesserung "
+    "vorschlaegt ('waere toll wenn...', 'fehlt mir...', 'koennt ihr...', "
+    "'wuensche mir...'). Title: 3-8 Worte. Description: User-Wortlaut "
+    "plus Kontext (Plan/Sprache/Use-Case falls bekannt). NICHT fuer "
+    "Bug-Reports (das ist escalate_to_human).",
+    {"title": str, "description": str},
+)
+async def create_feature_request(args: dict) -> dict:
+    if not NOTION_KEY:
+        return _err("Notion ist nicht konfiguriert (NOTION_API_KEY fehlt).")
+    title = (args.get("title") or "").strip()
+    description = (args.get("description") or "").strip()
+    if not title or not description:
+        return _err("title und description Pflicht.")
+    headers = {
+        "Authorization": f"Bearer {NOTION_KEY}",
+        "Notion-Version": NOTION_VERSION,
+        "Content-Type": "application/json",
+    }
+    body_md = (
+        description
+        + "\n\n---\n"
+        + f"Aus dem Terminal-Bot eingegangen.\nSession: {SESSION_ID}\n"
+        + f"Zeit: {dt.datetime.utcnow().isoformat()}Z"
+    )
+    payload = {
+        "parent": {"database_id": NOTION_FEATURE_DB_ID},
+        "properties": {
+            "Name": {"title": [{"text": {"content": title[:200]}}]},
+            "Status": {"status": {"name": "Nicht begonnen"}},
+        },
+        "children": [{
+            "object": "block", "type": "paragraph",
+            "paragraph": {"rich_text": [{"text": {"content": body_md[:1900]}}]},
+        }],
+    }
+    try:
+        resp = requests.post(f"{NOTION_API_URL}/pages", headers=headers,
+                              json=payload, timeout=20)
+    except Exception as e:  # noqa: BLE001
+        return _err(f"Verbindungsfehler zu Notion: {e}")
+    if resp.status_code not in (200, 201):
+        return _err(f"Notion-Fehler {resp.status_code}: {resp.text[:300]}")
+    data = resp.json()
+    return _ok({
+        "status": "feature_request_created",
+        "page_id": data.get("id"),
+        "page_url": data.get("url"),
+        "title": title,
+        "column": "Nicht begonnen",
+    })
+
+
+@tool(
     "escalate_to_human",
     "Eskaliert die aktuelle Konversation an einen Menschen im Plain-Helpdesk. "
     "Erstellt einen Test-Thread mit [BOT-TEST]-Prefix im Titel, haengt eine "
@@ -941,14 +1002,20 @@ CUSTOMER-DATEN (Mock-DB)
 PLAIN-HELPDESK (Echte Tickets)
 7. create_plain_thread(customer_email, customer_name, title, summary)
    -> Wenn ein Mensch das Thema aufgreifen soll, aber's nicht heiss/dringend
-      ist (Rueckruf-Bitte, Feature-Anfrage, "kann jemand das pruefen").
+      ist (Rueckruf-Bitte, "kann jemand das pruefen").
 8. add_plain_note(thread_id, body)
    -> Zusatz-Kontext an einen bereits erstellten Thread haengen.
 9. escalate_to_human(customer_email, customer_name, reason, summary)
    -> Fuer DRINGENDE Eskalationen: Refund/Cancel/Beschwerde-Triggers,
-      "ich will einen Menschen", emotional aufgeladene User, Account-
-      Aktionen, Bugs die Account-Zugriff brauchen.
-   -> Erstellt Thread + Eskalations-Note in einem Schritt.
+      "ich will einen Menschen", emotional aufgeladene User, Bugs.
+
+NOTION (Feature-Wuensche Board)
+10. create_feature_request(title, description)
+    -> Sobald der User eine Verbesserung/Erweiterung vorschlaegt
+       ("waere toll wenn...", "fehlt mir...", "wuensche mir...",
+       "koennt ihr...", "I wish you had..."). Legt eine Karte unter
+       "Nicht begonnen" im internen Notion-Board an. NICHT fuer Bugs
+       (das ist escalate_to_human).
 
 ACTION-TOOLS (Approval-pflichtig! Nutzer/Agent bestaetigt im Terminal)
 10. grant_test_credits(customer_id, credits, reason)
@@ -1009,6 +1076,9 @@ Weitere Regeln:
    Aufrufen.
 4. NIEMALS so tun als haettest du eine Aktion ausgefuehrt, die nicht
    approved wurde. Du siehst im Tool-Result, ob "executed" oder "denied".
+5. JEDER TURN MUSS MIT TEXT ENDEN. Auch nach Tool-Calls: formuliere fuer
+   den User in 1-2 Saetzen was passiert ist / was das Ergebnis bedeutet.
+   Niemals nur Tool-Calls ohne abschliessenden User-Satz.
 
 # WER ENTSCHEIDET UEBER AKTIONEN (WICHTIG)
 DU bist der Gatekeeper, nicht der Servierer. Wenn ein User um eine Action
@@ -1108,6 +1178,16 @@ Drei konkrete Sachen: was du tust, wann der Kunde Antwort bekommt, was er tun ka
 - Account-Aktionen (loeschen, Plan aendern)
 - Spezifische Bug-Reports die Account-Zugriff brauchen
 
+# FEATURE-WUNSCH-ERKENNUNG
+Sobald der User eine Verbesserung/Erweiterung vorschlaegt — Phrasen wie
+"waere cool wenn...", "fehlt mir...", "koennt ihr...", "wuensche mir...",
+"sollte es geben...", "I wish you had..." — rufst du create_feature_request
+auf. Title 3-8 Worte, Description = User-Wortlaut + Kontext.
+Bestaetige dem User in einem Satz: "Ich habe deinen Wunsch ins Produkt-
+Board eingetragen — das Team schaut da regelmaessig rein."
+NICHT escalate_to_human bei Feature-Wuenschen (das ist Plain, falsche
+Ablage). NICHT create_feature_request bei Bugs (das ist Plain, korrekt).
+
 ESKALATIONS-ABLAUF (WICHTIG, hat sich in Stufe B Teil 2 geaendert):
 
 Wenn ein Trigger zutrifft, mach das in genau dieser Reihenfolge:
@@ -1187,6 +1267,7 @@ async def chat() -> None:
             create_plain_thread,
             add_plain_note,
             escalate_to_human,
+            create_feature_request,
             grant_test_credits,
             restart_lipsync_job,
             apply_credit_bonus,
@@ -1211,6 +1292,7 @@ async def chat() -> None:
             "mcp__dubly__create_plain_thread",
             "mcp__dubly__add_plain_note",
             "mcp__dubly__escalate_to_human",
+            "mcp__dubly__create_feature_request",
         ],
         can_use_tool=approval_callback,
         model=CLAUDE_MODEL,
