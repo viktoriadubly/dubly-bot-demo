@@ -497,9 +497,9 @@ def tool_grant_test_credits(args: dict) -> str:
     if not cid or not reason:
         _audit("grant_test_credits", args, "failed", {"reason": "missing args"})
         return _err("customer_id und reason Pflicht.")
-    if not 1 <= credits <= 5:
+    if not 1 <= credits <= 6:
         _audit("grant_test_credits", args, "failed", {"reason": "credits out of range"})
-        return _err("credits muss zwischen 1 und 5 liegen.")
+        return _err("credits muss zwischen 1 und 6 liegen.")
     raw = load_mock_db()
     customers = raw.get("customers", [])
     c = next((x for x in customers if x["id"] == cid), None)
@@ -711,9 +711,15 @@ ANTHROPIC_TOOLS = [
     {
         "name": "grant_test_credits",
         "description": (
-            "Test-Credits fuer Free-User in AUSNAHMEFAELLEN (max 5). NUR bei Bug/"
-            "Plattform-Fehler unsererseits. NICHT auf 'will mehr testen' geben — "
-            "auf Abo-Optionen aus Help Center verweisen."
+            "Test-Credits fuer Free-User in Ausnahmefaellen (1-6, je nach "
+            "Video-Laenge des urspruenglichen Tests). Gerechtfertigt: "
+            "(a) Bug/Plattform-Fehler unsererseits hat den Credit verbraucht; "
+            "(b) der Test war wegen einer User-Wahl die nicht mehr aenderbar "
+            "ist unergiebig (z.B. 'Keep Original Voice' beim Voice-Test, "
+            "falsche Sprache, sehr kurzes Test-Video) und der User moechte "
+            "mit angepassten Settings nochmal testen -- dann 2-6 Credits je "
+            "nach Test-Video-Laenge. NICHT bei reiner 'will mehr testen'-"
+            "Anfrage ohne konkreten unergiebigen Erst-Test."
         ),
         "input_schema": {
             "type": "object",
@@ -789,6 +795,24 @@ Antworte IMMER in der Sprache der LETZTEN User-Nachricht. NICHT relevant: Email-
 - Warm und kompetent, aber nicht kumpelhaft.
 - Kurz im Chat: 1-3 Saetze ODER praezise Rueckfrage.
 - Emojis sparsam: max. 1 pro Antwort.
+
+# LOESUNGSORIENTIERT (sehr wichtig)
+Frage NIE nach Entscheidungen, die der User retroaktiv nicht mehr aendern
+kann (welche Voice frueher gewaehlt, welche Sprache, welches Format), es
+sei denn die Antwort hilft dir konkret bei der naechsten Aktion. Wir
+denken vorwaerts: was kann der User JETZT tun, was kannst DU jetzt tun.
+
+Frage auch NIEMALS nach Plan-Type ("hast du Trial oder Paid?") -- das
+holst du dir selbst per get_subscription nachdem du die Email hast.
+
+Beispiele:
+- Schlecht: "Welche Voice hast du beim ersten Test ausgewaehlt?"
+- Gut:     "Beim naechsten Versuch waehl eine der KI-Stimmen — die sind
+            aussagekraeftiger. Ich schreib dir 3 Test-Credits gut, damit
+            du das nochmal probieren kannst."
+- Schlecht: "Hast du einen kostenlosen Trial-Account oder einen bezahlten Plan?"
+- Gut:     [get_customer + get_subscription, dann auf Basis der Realitaet
+            antworten ohne den User zu fragen]
 
 # TERMINOLOGIE (WICHTIG)
 Die Tools sprechen intern von "Jobs". Im Chat NIEMALS "Job" sagen.
