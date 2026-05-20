@@ -1191,11 +1191,16 @@ st.markdown(f"""
 
 # ---------- Sidebar ----------
 MOCK_CUSTOMER_DISPLAY = [
-    ("lisa.bauer@beispiel.de", "Lisa Bauer", "free", "Neu, 1 Test-Credit, keine Übersetzungen"),
-    ("marco.rossi@example.com", "Marco Rossi", "free", "Test-Credit verbraucht, 1 Dub gemacht"),
-    ("sarah.klein@beispiel.de", "Sarah Klein", "starter", "Paid, nur noch 8/100 Credits"),
-    ("alex.chen@example.com", "Alex Chen", "pro", "Letzter Lip-Sync fehlgeschlagen"),
-    ("marie.lefevre@example.com", "Marie Lefèvre", "pro", "Power-User, Job läuft gerade"),
+    ("lisa.bauer@beispiel.de", "Lisa Bauer", "free",
+     "Brandneu, hat den 1 Test-Credit noch nicht verbraucht"),
+    ("marco.rossi@example.com", "Marco Rossi", "free",
+     "Test-Credit aufgebraucht, überlegt zu abonnieren"),
+    ("sarah.klein@beispiel.de", "Sarah Klein", "starter",
+     "Bezahltes Abo, Credits fast leer, Renewal bald"),
+    ("alex.chen@example.com", "Alex Chen", "pro",
+     "Bezahltes Abo, letzte Übersetzung ist gescheitert"),
+    ("marie.lefevre@example.com", "Marie Lefèvre", "pro",
+     "Bezahltes Abo, übersetzt regelmäßig, Job läuft gerade"),
 ]
 
 with st.sidebar:
@@ -1246,7 +1251,7 @@ if "feedback_given" not in st.session_state:
 
 def _render_msg(i: int, msg: dict) -> None:
     role = msg["role"]
-    avatar = "🟧" if role == "assistant" else "🧑"
+    avatar = "💬" if role == "assistant" else "🧑"
     with st.chat_message(role, avatar=avatar):
         content = msg["content"]
         if isinstance(content, list):
