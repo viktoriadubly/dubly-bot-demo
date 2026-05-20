@@ -825,6 +825,26 @@ rauskippen. Filtere und uebersetze:
    melde dich nochmal mit Video-Link und Timestamp und ich hol ein
    Teammitglied dazu."
 
+5. NIEMALS Meta-Verweise auf das Help Center im Antwort-Text wie:
+   "Das Help Center sagt…", "Im Help Center steht…", "Laut unserer
+   Doku…", "Wir haben einen Artikel zu…", "Das ist im Help Center
+   beschrieben…", "Hier eine Zusammenfassung aus dem Help Center…"
+   Sondern: sag die Loesung direkt als eigene Antwort, wie ein echter
+   Support-Mensch das tun wuerde. Der User soll sich ernstgenommen
+   fuehlen, nicht wie ein Briefkasten der weiterverwiesen wird.
+
+   Beispiele:
+   Schlecht: "Das Help Center sagt: klick auf Export und waehl SRT."
+   Gut:     "Klick im Editor auf Export und waehl SRT als Format."
+
+   Schlecht: "Laut unserer Doku kannst du das Abo jederzeit kuendigen…"
+   Gut:     "Klar — du kannst dein Abo jederzeit ueber Settings →
+            Subscription kuendigen…"
+
+   Die Quell-URL am Ende der Antwort ist okay (siehe QUELLEN unten) --
+   die ist ein Service ("hier kannst du mehr lesen wenn du willst"),
+   keine Distanzierungsfloskel im Antwort-Korpus.
+
 # IDENTITY-CHECK (NUR wenn unbedingt noetig)
 Standardvorgehen: bei JEDER Anfrage zuerst search_knowledge_base versuchen,
 ohne nach Email zu fragen. Das Help Center loest etwa 80% der Anfragen.
@@ -1336,6 +1356,24 @@ st.markdown(f"""
     box-shadow: none !important;
   }}
 
+  /* ---------- Typing Indicator ---------- */
+  .typing-indicator {{
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 0;
+  }}
+  .typing-indicator span {{
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: {DUBLY_SUBTLE};
+    animation: typing 1.3s infinite ease-in-out;
+  }}
+  .typing-indicator span:nth-child(2) {{ animation-delay: 0.18s; }}
+  .typing-indicator span:nth-child(3) {{ animation-delay: 0.36s; }}
+  @keyframes typing {{
+    0%, 70%, 100% {{ opacity: 0.3; transform: translateY(0); }}
+    35% {{ opacity: 1; transform: translateY(-3px); }}
+  }}
+
   /* ---------- Footer ---------- */
   .dubly-footer {{
     margin-top: 28px; padding-top: 18px;
@@ -1559,7 +1597,10 @@ if prompt:
     # Tool-Loop laufen lassen
     with st.chat_message("assistant", avatar="💬"):
         placeholder = st.empty()
-        placeholder.markdown("_Einen Moment, ich schaue nach…_")
+        placeholder.markdown(
+            '<div class="typing-indicator"><span></span><span></span><span></span></div>',
+            unsafe_allow_html=True,
+        )
         # Konversation fuer API: nur strings als content
         api_conv = []
         for m in st.session_state.messages[:-1]:  # ohne letzte (das ist der Prompt)
