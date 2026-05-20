@@ -14,7 +14,9 @@ Cloud-Deployment: siehe 16_Web-Demo-Anleitung.docx
 
 from __future__ import annotations
 
+import base64
 import datetime as dt
+import io
 import json
 import os
 import sys
@@ -796,6 +798,25 @@ Antworte IMMER in der Sprache der LETZTEN User-Nachricht. NICHT relevant: Email-
 - Kurz im Chat: 1-3 Saetze ODER praezise Rueckfrage.
 - Emojis sparsam: max. 1 pro Antwort.
 
+# FRUSTRATIONS-ERKENNUNG (wichtig)
+Achte auf Signale dass der User genervt/frustriert ist. Indikatoren:
+- Worte: "funktioniert nicht", "schon mehrfach", "echt jetzt", "warum
+  geht das nicht", "macht keinen Sinn", "ist nervig", "nervt mich",
+  "frustrierend", "wtf", "really?", "are you kidding me", "this is broken"
+- Wiederholung: User stellt die gleiche Frage ein zweites Mal um
+- Versalien-Schreibung, Mehrfach-Ausrufezeichen
+- Sehr kurze, knappe User-Antworten ("nope", "still doesnt work")
+
+Bei Frustration: Strategie WECHSELN, nicht weitermachen wie vorher.
+1. Kuerzer antworten, nicht mehr Optionen-Listen.
+2. Emotion validieren in einem Satz: "Das ist nervig, sorry." /
+   "Verstehe — das frustriert."
+3. Direkt zu Action: entweder eine konkrete Aktion ausfuehren (Tool-
+   Call) oder ESKALIEREN. Niemals zum zweiten Mal nachfragen wenn
+   der User schon einmal genervt klang.
+4. Keine Phrasen wie "kein Problem!" / "kein Stress!" -- die wirken
+   abtuend wenn jemand frustriert ist.
+
 # LOESUNGSORIENTIERT (sehr wichtig)
 Frage NIE nach Entscheidungen, die der User retroaktiv nicht mehr aendern
 kann (welche Voice frueher gewaehlt, welche Sprache, welches Format), es
@@ -977,6 +998,23 @@ URL natuerlich ein Mal in deine Antwort ein -- entweder am Ende
 ein Link pro Antwort reicht. Das gibt dem User die Moeglichkeit
 nachzulesen ohne dass es klingt wie "lies's halt selbst".
 
+# BILDER IN ANTWORTEN
+Wenn ein Help-Center-Chunk eine Bild-URL enthaelt (z.B. .png, .jpg in
+einer https-URL) und das Bild zum Thema passt (z.B. zeigt den UI-Button
+ueber den du gerade sprichst), bau es in deine Antwort als Markdown-Bild
+ein: ![Beschreibung](URL). Die UI rendert das. NICHT pro Antwort mehrere
+Bilder -- maximal eins, und nur wenn's wirklich hilft.
+
+# WENN DER USER EIN BILD MITSCHICKT
+Du kannst Bilder sehen. Wenn der User einen Screenshot anhaengt:
+1. Beschreibe in einem Satz was du im Bild siehst (zeigt dem User dass
+   du's wirklich angeschaut hast).
+2. Antworte auf Basis dessen was du im Bild siehst + dem Text-Teil.
+3. Bei UI-Screenshots: nenne konkrete Buttons/Felder/Werte die du siehst
+   ("Du hast 'Keep Original Voice' aktiv -- der Schalter rechts oben").
+4. Bei Fehler-Screenshots: lies die Fehlermeldung wortwoertlich und
+   loese gezielt das Problem.
+
 # GATEKEEPER-PRINZIP
 DU entscheidest ob Aktionen gerechtfertigt sind, nicht der User. Bei reiner Bitte "kann ich mehr Test-Credits?" sagst du freundlich NEIN und verweist auf Abo. Nur bei nachvollziehbarem PLATTFORM-Fehler gibst du Kulanz.
 
@@ -994,18 +1032,54 @@ def build_system_prompt() -> str:
 # ---------------------------------------------------------------------------
 # Chat-Logik: Tool-Loop mit Anthropic-SDK
 # ---------------------------------------------------------------------------
-def run_turn(conversation: list[dict], user_msg: str) -> tuple[str, list[dict]]:
-    """Fuehrt einen User-Turn aus: Anthropic-Call -> ggf. Tool-Loop -> finaler Text.
-    Gibt (final_text, tool_trail) zurueck.
+def _build_user_content(text: str, images: list[dict] | None = None) -> str | list:
+    """Wenn Bilder dabei sind, gib ein Multi-Block-Content zurueck; sonst
+    einfach den Text-String. Anthropic akzeptiert beides."""
+    if not images:
+        return text
+    blocks = []
+    for img in images:
+        blocks.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": img["media_type"],
+                "data": img["data"],
+            },
+        })
+    if text:
+        blocks.append({"type": "text", "text": text})
+    return blocks
 
-    WICHTIG: Anthropic kann in EINER Antwort sowohl Text als auch Tool-Uses
-    zurueckgeben. Wir akkumulieren ALLE Text-Bloecke ueber alle Steps, damit
-    keiner verlorengeht (z.B. 'Ich schaue nach' in Step 1, dann 'Hier ist die
-    Loesung' in Step 2). Falls die finale Step KEINEN Text liefert, fallen
-    wir auf die akkumulierten Texte zurueck.
-    """
+
+def _file_to_image_block(uploaded_file) -> dict | None:
+    """Streamlit UploadedFile -> dict mit base64 + media_type."""
+    try:
+        raw = uploaded_file.getvalue()
+        name = (uploaded_file.name or "").lower()
+        if name.endswith(".png"):
+            media = "image/png"
+        elif name.endswith(".gif"):
+            media = "image/gif"
+        elif name.endswith(".webp"):
+            media = "image/webp"
+        else:
+            media = "image/jpeg"
+        return {
+            "media_type": media,
+            "data": base64.b64encode(raw).decode("ascii"),
+            "filename": uploaded_file.name,
+        }
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def run_turn(conversation: list[dict], user_content) -> tuple[str, list[dict]]:
+    """Fuehrt einen User-Turn aus: Anthropic-Call -> ggf. Tool-Loop -> finaler Text.
+    user_content kann ein String sein ODER eine Liste von Content-Bloecken
+    (text + image), je nachdem ob der User ein Bild mitgeschickt hat."""
     client = get_anthropic()
-    messages = conversation + [{"role": "user", "content": user_msg}]
+    messages = conversation + [{"role": "user", "content": user_content}]
     tool_trail: list[dict] = []
     text_parts: list[str] = []   # akkumulierte Text-Bloecke ueber alle Steps
 
@@ -1539,10 +1613,26 @@ def _render_msg(i: int, msg: dict) -> None:
     avatar = "💬" if role == "assistant" else "🧑"
     with st.chat_message(role, avatar=avatar):
         content = msg["content"]
-        if isinstance(content, list):
-            # serialisierte Tool-Use-Blocks (kommen nicht ans UI)
-            return
-        st.markdown(content)
+        if isinstance(content, str):
+            st.markdown(content)
+        elif isinstance(content, list):
+            # Multi-Block content: Bilder + Text (User-Side) oder Tool-Use-Blocks
+            for block in content:
+                # Anthropic-Block kann dict oder SDK-Objekt sein
+                btype = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
+                if btype == "image":
+                    src = block.get("source") if isinstance(block, dict) else getattr(block, "source", None)
+                    if src and src.get("type") == "base64":
+                        try:
+                            img_bytes = base64.b64decode(src["data"])
+                            st.image(img_bytes, width=320)
+                        except Exception:  # noqa: BLE001
+                            pass
+                elif btype == "text":
+                    text = block.get("text") if isinstance(block, dict) else getattr(block, "text", "")
+                    if text:
+                        st.markdown(text)
+                # tool_use/tool_result Bloecke ignorieren (interner Bot-State)
         # Tool-Trail
         trail = st.session_state.tool_trails.get(i, [])
         if trail and role == "assistant":
@@ -1591,6 +1681,21 @@ def _render_msg(i: int, msg: dict) -> None:
                     )
                     st.session_state.feedback_open[i] = False
                     st.toast("Danke für dein Feedback!")
+                    st.rerun()
+            # Follow-up Quick-Action-Chips (Mensch holen, Mehr Details)
+            qcols = st.columns([1, 1, 5])
+            with qcols[0]:
+                if st.button("💬 Mensch holen", key=f"qa_human_{i}", help="Bot eskaliert direkt an dein Team"):
+                    st.session_state.starter_clicked = (
+                        "Ich möchte mit einem Menschen sprechen."
+                    )
+                    st.rerun()
+            with qcols[1]:
+                if st.button("🔍 Mehr Details", key=f"qa_more_{i}", help="Bot erklärt ausführlicher"):
+                    st.session_state.starter_clicked = (
+                        "Kannst du das nochmal etwas ausführlicher erklären, "
+                        "Schritt für Schritt?"
+                    )
                     st.rerun()
 
 
@@ -1650,15 +1755,46 @@ if not st.session_state.messages:
 for i, msg in enumerate(st.session_state.messages):
     _render_msg(i, msg)
 
-# Input — chat_input UND starter-clicked beide moeglich
-prompt = st.chat_input("Stell deine Frage…")
-if not prompt and "starter_clicked" in st.session_state:
-    prompt = st.session_state.pop("starter_clicked")
+# Input — chat_input mit File-Upload (PNG/JPG/Screenshots)
+try:
+    prompt_input = st.chat_input(
+        "Stell deine Frage… (Screenshot anhängen möglich)",
+        accept_file=True,
+        file_type=["png", "jpg", "jpeg", "gif", "webp"],
+    )
+except TypeError:
+    # Aelterer Streamlit ohne accept_file -- ohne Upload weiter
+    prompt_input = st.chat_input("Stell deine Frage…")
 
-if prompt:
-    st.session_state.messages.append({"role": "user", "content": prompt})
+# Eingabe aus drei Quellen vereinheitlichen: chat_input, starter_clicked, follow-up
+prompt_text: str = ""
+prompt_files: list = []
+if prompt_input is not None:
+    if isinstance(prompt_input, str):
+        prompt_text = prompt_input
+    else:
+        prompt_text = (getattr(prompt_input, "text", "") or "").strip()
+        prompt_files = list(getattr(prompt_input, "files", []) or [])
+elif "starter_clicked" in st.session_state:
+    prompt_text = st.session_state.pop("starter_clicked")
+
+if prompt_text or prompt_files:
+    image_blocks = []
+    for f in prompt_files:
+        ib = _file_to_image_block(f)
+        if ib:
+            image_blocks.append(ib)
+    # User-Content fuer API + Storage zusammenbauen
+    user_content = _build_user_content(prompt_text or "(Bild angehängt)", image_blocks)
+    st.session_state.messages.append({"role": "user", "content": user_content})
     with st.chat_message("user", avatar="🧑"):
-        st.markdown(prompt)
+        for ib in image_blocks:
+            try:
+                st.image(base64.b64decode(ib["data"]), width=320)
+            except Exception:  # noqa: BLE001
+                pass
+        if prompt_text:
+            st.markdown(prompt_text)
     # Tool-Loop laufen lassen
     with st.chat_message("assistant", avatar="💬"):
         placeholder = st.empty()
@@ -1666,15 +1802,11 @@ if prompt:
             '<div class="typing-indicator"><span></span><span></span><span></span></div>',
             unsafe_allow_html=True,
         )
-        # Konversation fuer API: nur strings als content
         api_conv = []
-        for m in st.session_state.messages[:-1]:  # ohne letzte (das ist der Prompt)
-            if isinstance(m["content"], str):
-                api_conv.append({"role": m["role"], "content": m["content"]})
-            else:
-                api_conv.append({"role": m["role"], "content": m["content"]})
+        for m in st.session_state.messages[:-1]:
+            api_conv.append({"role": m["role"], "content": m["content"]})
         try:
-            final_text, trail = run_turn(api_conv, prompt)
+            final_text, trail = run_turn(api_conv, user_content)
         except Exception as e:  # noqa: BLE001
             final_text = f"_Fehler beim Aufruf: {type(e).__name__}: {e}_"
             trail = []
