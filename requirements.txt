@@ -1,0 +1,5 @@
+streamlit>=1.35
+anthropic>=0.39
+google-genai>=0.5
+numpy>=1.26
+requests>=2.31

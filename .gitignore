@@ -1,0 +1,21 @@
+# API-Keys nie ins Git/Cloud
+.env
+.env.local
+*.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Audit-Logs + Feedback (lokale Test-Daten, nicht ins Repo)
+audit_log.jsonl
+feedback.jsonl
+
+# Streamlit-Secrets (echte Cloud-Secrets stehen separat in Streamlit-Settings)
+.streamlit/secrets.toml
+
+# macOS
+.DS_Store
