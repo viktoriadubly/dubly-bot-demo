@@ -300,11 +300,24 @@ def tool_search_knowledge_base(args: dict) -> str:
     hits = _retrieve(query, top_k)
     top = hits[0]["score"] if hits else 0.0
     if top < MIN_SIMILARITY:
-        body = f"KEIN ARTIKEL UEBER SCHWELLE. Bester Score: {top}. Sei ehrlich, eskaliere.\n\n"
+        body = (
+            f"KEIN ARTIKEL UEBER SCHWELLE. Bester Score: {top}. "
+            "Sei ehrlich, eskaliere.\n\n"
+        )
     else:
-        body = f"GEFUNDEN: {len(hits)} Treffer (Top {top}).\n\n"
+        body = (
+            f"GEFUNDEN: {len(hits)} Treffer (Top {top}).\n"
+            "REMINDER: Verlinke Treffer 1 (oder den passendsten) im Markdown-"
+            "Format in deiner Antwort, z.B.:\n"
+            f"  [{hits[0]['title']}]({hits[0]['url']})\n\n"
+        )
     for i, h in enumerate(hits, start=1):
-        body += f"--- Treffer {i} (Score {h['score']}) ---\nTitel: {h['title']}\nQuelle: {h['url']}\n{h['text']}\n\n"
+        body += (
+            f"--- Treffer {i} (Score {h['score']}) ---\n"
+            f"Titel: {h['title']}\n"
+            f"URL fuer Markdown-Link: {h['url']}\n"
+            f"{h['text']}\n\n"
+        )
     return body
 
 
@@ -791,6 +804,16 @@ SYSTEM_PROMPT_BASE = """Du bist der KI-Support-Assistent von Dubly.AI -- einer S
 
 # SPRACH-REGEL (WICHTIGSTE REGEL, NIEMALS BRECHEN)
 Antworte IMMER in der Sprache der LETZTEN User-Nachricht. NICHT relevant: Email-Domain, Name des Kunden, was du frueher geantwortet hast. NUR die aktuelle Nachricht zaehlt.
+
+# HELP-CENTER-LINK IST PFLICHT (auch wichtig, nicht vergessen)
+Wenn search_knowledge_base einen Treffer mit Score >= 0.55 geliefert hat,
+MUSS dieser Treffer in deiner Antwort als Markdown-Link erscheinen.
+Format: "[Beschreibender Linktitel](URL)". Nicht "Klick hier", nicht
+"Quelle", sondern eine sprechende Beschreibung was den User dort
+erwartet ("Schritt-fuer-Schritt-Export-Anleitung", "Plan-Uebersicht").
+Maximal 1 Link pro Antwort, der relevanteste.
+Bei Score < 0.55: KEIN Link erfinden, ehrlich sagen "weiss ich nicht"
+und eskalieren.
 
 # DEIN CHARAKTER
 - Geduzt im Deutschen, "you" im Englischen. Niemals "Sie".
@@ -1715,10 +1738,10 @@ def _render_msg(i: int, msg: dict) -> None:
                     )
                     st.rerun()
             with cols[4]:
-                if st.button("Mensch holen", key=f"qa_human_{i}",
-                             help="Direkt an dein Team weiterleiten"):
+                if st.button("Mit Team sprechen", key=f"qa_human_{i}",
+                             help="Direkt an einen Menschen aus dem Team weiterleiten"):
                     st.session_state.starter_clicked = (
-                        "Ich möchte mit einem Menschen sprechen."
+                        "Ich möchte mit einem Menschen aus dem Team sprechen."
                     )
                     st.rerun()
 
