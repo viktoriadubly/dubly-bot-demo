@@ -704,6 +704,14 @@ Antworte IMMER in der Sprache der LETZTEN User-Nachricht. NICHT relevant: Email-
 - Kurz im Chat: 1-3 Saetze ODER praezise Rueckfrage.
 - Emojis sparsam: max. 1 pro Antwort.
 
+# TERMINOLOGIE (WICHTIG)
+Die Tools sprechen intern von "Jobs". Im Chat NIEMALS "Job" sagen.
+Stattdessen, je nach Kontext: "dein Video" / "deine Uebersetzung" /
+"dein Dub" (bei type=dub) / "dein Lip-Sync" (bei type=lipsync) /
+"deine Stimm-Klone" (bei type=voice_clone).
+Englisch analog: "your video" / "your translation" / "your dub" /
+"your lip sync" / "your voice clone". Niemals "your job".
+
 # QUELLE FUER GESCHAEFTS-FAKTEN
 Konkrete Geschaefts-Fakten (Pricing, Plan-Inhalt, Test-Credit-Menge, Refund-Bedingungen, unterstuetzte Sprachen) NIEMALS aus dem Gedaechtnis -- IMMER ueber search_knowledge_base. Wenn Help Center nichts liefert (Score < 0.55): ehrlich "weiss ich nicht" und eskalieren.
 
@@ -832,218 +840,395 @@ def save_feedback(message_id: str, rating: str, comment: str, transcript: list[d
 
 
 # ---------------------------------------------------------------------------
-# Streamlit UI — Dubly-Branding
+# Streamlit UI — Dubly-Branding (polished)
 # ---------------------------------------------------------------------------
-# Markenfarben angelehnt an dubly.ai (professional B2B, deutsch, "Made in Germany").
-# Falls eure CI andere Werte vorgibt: hier direkt anpassen.
-DUBLY_BLACK = "#0A0A0F"     # Header / Hero-Hintergrund
-DUBLY_INK = "#1A1A24"       # Sekundär-Dunkel
-DUBLY_TEXT = "#0E0E14"      # Body-Text
-DUBLY_MUTED = "#6B7280"     # Meta-Text
-DUBLY_ACCENT = "#7C5CFF"    # zurueckhaltender Akzent (Lavender-Indigo)
-DUBLY_BG = "#FAFAFA"        # App-Hintergrund
-DUBLY_CARD = "#FFFFFF"      # Karten
-DUBLY_BORDER = "#E5E7EB"    # Linien
-DUBLY_DEMO = "#0A0A0F"      # Demo-Badge (schwarz, kein Knallrot)
+DUBLY_BLACK = "#0A0A0F"
+DUBLY_INK = "#15161E"
+DUBLY_TEXT = "#0E0E14"
+DUBLY_MUTED = "#6B7280"
+DUBLY_SUBTLE = "#9CA3AF"
+DUBLY_ACCENT = "#7C5CFF"
+DUBLY_ACCENT_SOFT = "#EFEAFF"
+DUBLY_BG = "#F7F7F9"
+DUBLY_CARD = "#FFFFFF"
+DUBLY_BORDER = "#E8E8EE"
+DUBLY_USER_BG = "#0E0E14"
 
-# Logo aus dem Dubly-Web (Next.js-Image-Proxy). Falls Link bricht: ersetzen
-# durch lokalen Pfad oder anderen CDN-Link.
 DUBLY_LOGO_URL = (
     "https://app.dubly.ai/_next/image?url=%2Fimages%2Flogo-dubly-full_dark.png"
     "&w=384&q=75&dpl=dpl_C6PgYs7oS5mpyHjdH3T7tmbhH9Ui"
 )
 
 st.set_page_config(
-    page_title="Dubly Support — Bot-Demo",
+    page_title="Dubly Support — Bot Demo",
     page_icon="💬",
     layout="centered",
+    initial_sidebar_state="expanded",
 )
 
-# Custom CSS
 st.markdown(f"""
 <style>
-  /* Reset Streamlit Defaults */
-  .main {{ background-color: {DUBLY_BG}; }}
-  .stApp {{
-    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* ---------- Base ---------- */
+  html, body, .stApp {{
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", sans-serif;
     color: {DUBLY_TEXT};
+    -webkit-font-smoothing: antialiased;
   }}
+  .main {{ background: {DUBLY_BG}; }}
   #MainMenu, footer, header[data-testid="stHeader"] {{ visibility: hidden; }}
-  .block-container {{ padding-top: 1.5rem !important; max-width: 760px; }}
-
-  /* Hero / Header */
-  .dubly-hero {{
-    background: {DUBLY_BLACK};
-    color: white;
-    padding: 28px 32px;
-    border-radius: 16px;
-    margin-bottom: 20px;
-    box-shadow: 0 6px 24px rgba(10, 10, 15, 0.08);
+  .block-container {{
+    padding-top: 1.5rem !important;
+    padding-bottom: 7rem !important;
+    max-width: 820px;
   }}
+
+  /* ---------- Hero ---------- */
+  .dubly-hero {{
+    position: relative;
+    background:
+      radial-gradient(80% 120% at 100% 0%, rgba(124,92,255,0.32) 0%, rgba(124,92,255,0) 60%),
+      radial-gradient(60% 100% at 0% 100%, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 60%),
+      linear-gradient(160deg, {DUBLY_BLACK} 0%, #161724 100%);
+    color: #fff;
+    padding: 32px 36px;
+    border-radius: 22px;
+    margin-bottom: 28px;
+    box-shadow:
+      0 12px 40px -8px rgba(10, 10, 15, 0.28),
+      0 2px 8px rgba(10, 10, 15, 0.06);
+    overflow: hidden;
+  }}
+  .dubly-hero::after {{
+    content: ""; position: absolute; inset: 0;
+    background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size: 18px 18px;
+    pointer-events: none; opacity: 0.5;
+  }}
+  .dubly-hero > * {{ position: relative; z-index: 1; }}
   .dubly-logo-row {{
     display: flex; align-items: center; justify-content: space-between;
-    margin-bottom: 14px;
+    margin-bottom: 22px;
   }}
-  .dubly-logo {{ height: 26px; }}
+  .dubly-logo {{ height: 28px; }}
   .demo-badge {{
-    display: inline-flex; align-items: center; gap: 6px;
-    background: rgba(255,255,255,0.10);
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(255,255,255,0.08);
+    backdrop-filter: blur(8px);
     color: #fff;
-    padding: 5px 12px;
+    padding: 6px 14px;
     border-radius: 999px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.6px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.7px;
     text-transform: uppercase;
-    border: 1px solid rgba(255,255,255,0.18);
+    border: 1px solid rgba(255,255,255,0.16);
   }}
-  .demo-badge::before {{
-    content: ""; width: 6px; height: 6px;
+  .demo-badge .pulse {{
+    width: 7px; height: 7px;
     background: #FFD166; border-radius: 50%;
-    box-shadow: 0 0 0 3px rgba(255, 209, 102, 0.18);
+    box-shadow: 0 0 0 0 rgba(255, 209, 102, 0.7);
+    animation: pulse 2s infinite;
+  }}
+  @keyframes pulse {{
+    0% {{ box-shadow: 0 0 0 0 rgba(255, 209, 102, 0.55); }}
+    70% {{ box-shadow: 0 0 0 8px rgba(255, 209, 102, 0); }}
+    100% {{ box-shadow: 0 0 0 0 rgba(255, 209, 102, 0); }}
   }}
   .dubly-hero h1 {{
-    margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.01em;
+    margin: 0; font-size: 30px; line-height: 1.15;
+    font-weight: 700; letter-spacing: -0.02em;
   }}
   .dubly-hero p.sub {{
-    margin: 6px 0 0; font-size: 13.5px; color: rgba(255,255,255,0.66);
-    font-weight: 400; line-height: 1.5;
+    margin: 10px 0 0; font-size: 15px;
+    color: rgba(255,255,255,0.72); font-weight: 400; line-height: 1.55;
+    max-width: 540px;
   }}
   .trust-row {{
-    display: flex; flex-wrap: wrap; gap: 12px;
-    margin-top: 16px; padding-top: 14px;
+    display: flex; flex-wrap: wrap; gap: 14px;
+    margin-top: 24px; padding-top: 18px;
     border-top: 1px solid rgba(255,255,255,0.08);
-    font-size: 11.5px; color: rgba(255,255,255,0.55);
-    letter-spacing: 0.3px;
+    font-size: 12px; color: rgba(255,255,255,0.6);
+    letter-spacing: 0.2px; font-weight: 500;
   }}
-  .trust-row span {{ display: inline-flex; align-items: center; gap: 4px; }}
+  .trust-row span {{ display: inline-flex; align-items: center; gap: 6px; }}
+  .trust-row .dot {{
+    width: 4px; height: 4px; background: rgba(255,255,255,0.4);
+    border-radius: 50%;
+  }}
 
-  /* Chat-Messages */
-  .stChatMessage {{
-    background: {DUBLY_CARD};
-    border-radius: 14px;
-    padding: 8px;
-    border: 1px solid {DUBLY_BORDER};
-    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+  /* ---------- Welcome / Starter Prompts ---------- */
+  .welcome-eyebrow {{
+    color: {DUBLY_MUTED};
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
     margin-bottom: 8px;
   }}
-  .stChatMessage[data-testid*="user"] {{
-    background: #F4F4F6;
-    border-color: #ECECEF;
+  .welcome-title {{
+    font-size: 22px; font-weight: 700; letter-spacing: -0.01em;
+    margin: 0 0 8px 0; color: {DUBLY_TEXT};
   }}
-  /* Avatare */
-  .stChatMessage [data-testid="chatAvatarIcon-user"],
-  .stChatMessage [data-testid="chatAvatarIcon-assistant"] {{
-    background: transparent !important;
+  .welcome-sub {{
+    color: {DUBLY_MUTED}; font-size: 14.5px; line-height: 1.55;
+    margin: 0 0 22px 0;
+  }}
+  .starter-grid > div[data-testid="column"] > div > div > div > button {{
+    width: 100% !important;
+    text-align: left !important;
+    background: {DUBLY_CARD} !important;
+    border: 1px solid {DUBLY_BORDER} !important;
+    border-radius: 14px !important;
+    padding: 16px 18px !important;
+    height: auto !important;
+    min-height: 76px !important;
+    color: {DUBLY_TEXT} !important;
+    font-weight: 500 !important;
+    line-height: 1.45 !important;
+    transition: all 0.16s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    white-space: pre-line !important;
+  }}
+  .starter-grid > div[data-testid="column"] > div > div > div > button:hover {{
+    border-color: {DUBLY_ACCENT} !important;
+    background: {DUBLY_ACCENT_SOFT} !important;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px -2px rgba(124,92,255,0.16);
   }}
 
-  /* Tool-Trail Box */
+  /* ---------- Chat ---------- */
+  div[data-testid="stChatMessage"] {{
+    background: transparent !important;
+    border: none !important;
+    padding: 4px 0 !important;
+    box-shadow: none !important;
+    margin-bottom: 4px !important;
+  }}
+  div[data-testid="stChatMessage"] > div:nth-child(2) {{
+    background: {DUBLY_CARD};
+    border: 1px solid {DUBLY_BORDER};
+    border-radius: 16px;
+    padding: 14px 18px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    line-height: 1.55;
+  }}
+  /* User-Bubble dunkel + rechts */
+  div[data-testid="stChatMessage"]:has(div[data-testid="chatAvatarIcon-user"]) {{
+    flex-direction: row-reverse;
+  }}
+  div[data-testid="stChatMessage"]:has(div[data-testid="chatAvatarIcon-user"]) > div:nth-child(2) {{
+    background: {DUBLY_USER_BG};
+    color: #fff;
+    border-color: {DUBLY_USER_BG};
+    margin-left: auto;
+  }}
+  div[data-testid="stChatMessage"]:has(div[data-testid="chatAvatarIcon-user"]) > div:nth-child(2) p {{
+    color: #fff !important;
+  }}
+  /* Avatare */
+  div[data-testid="chatAvatarIcon-user"],
+  div[data-testid="chatAvatarIcon-assistant"] {{
+    background: {DUBLY_CARD} !important;
+    border: 1px solid {DUBLY_BORDER} !important;
+    width: 34px !important;
+    height: 34px !important;
+    border-radius: 10px !important;
+    font-size: 16px !important;
+  }}
+
+  /* ---------- Tool-Trail ---------- */
   details {{ margin-top: 10px; }}
   details summary {{
-    cursor: pointer; color: {DUBLY_MUTED}; font-size: 12.5px;
-    padding: 4px 0; user-select: none;
+    cursor: pointer;
+    color: {DUBLY_MUTED};
+    font-size: 12.5px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: #F2F2F5;
+    border: 1px solid {DUBLY_BORDER};
+    user-select: none;
+    display: inline-block;
+    list-style: none;
+    transition: all 0.15s ease;
   }}
-  details summary:hover {{ color: {DUBLY_TEXT}; }}
+  details summary:hover {{ color: {DUBLY_TEXT}; background: #EDEDF1; }}
+  details summary::-webkit-details-marker {{ display: none; }}
+  details summary::before {{
+    content: "▸ ";
+    display: inline-block; margin-right: 4px;
+    transition: transform 0.2s;
+  }}
+  details[open] summary::before {{ transform: rotate(90deg); }}
   .tool-line {{
-    background: #F4F4F6;
+    background: #F7F7F9;
     border: 1px solid {DUBLY_BORDER};
     padding: 8px 12px;
     border-radius: 8px;
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
-    font-size: 12px;
-    margin-bottom: 6px;
+    font-size: 11.5px;
+    margin: 8px 0 4px;
     color: {DUBLY_TEXT};
+    line-height: 1.5;
   }}
 
-  /* Buttons */
+  /* ---------- Feedback Buttons ---------- */
+  .feedback-section {{ margin-top: 10px; }}
+
+  /* ---------- General Buttons ---------- */
   .stButton > button {{
-    border-radius: 999px;
+    border-radius: 10px;
     border: 1px solid {DUBLY_BORDER};
     background: {DUBLY_CARD};
     color: {DUBLY_TEXT};
+    font-weight: 500;
     transition: all 0.15s ease;
   }}
-  .stButton > button:hover {{
+  .stButton > button:hover:not(:disabled) {{
     border-color: {DUBLY_ACCENT};
     color: {DUBLY_ACCENT};
   }}
   .stButton > button[kind="primary"] {{
-    background: {DUBLY_BLACK};
-    color: #fff; border-color: {DUBLY_BLACK};
+    background: {DUBLY_TEXT};
+    color: #fff;
+    border-color: {DUBLY_TEXT};
   }}
-  .stButton > button[kind="primary"]:hover {{
+  .stButton > button[kind="primary"]:hover:not(:disabled) {{
     background: {DUBLY_INK};
     border-color: {DUBLY_INK};
     color: #fff;
   }}
 
-  /* Sidebar */
+  /* ---------- Sidebar ---------- */
   section[data-testid="stSidebar"] {{
     background: {DUBLY_CARD};
     border-right: 1px solid {DUBLY_BORDER};
   }}
-  section[data-testid="stSidebar"] h3 {{
-    font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px;
-    color: {DUBLY_MUTED}; font-weight: 600; margin-top: 16px;
+  section[data-testid="stSidebar"] .block-container {{
+    padding-top: 1.5rem !important;
+    padding-bottom: 1.5rem !important;
   }}
-  section[data-testid="stSidebar"] code {{
-    background: #F4F4F6; padding: 1px 6px; border-radius: 4px;
-    font-size: 11.5px; color: {DUBLY_TEXT};
+  section[data-testid="stSidebar"] h3 {{
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: {DUBLY_SUBTLE}; font-weight: 700; margin: 22px 0 10px;
+  }}
+  .sb-customer {{
+    background: #F7F7F9;
+    border: 1px solid {DUBLY_BORDER};
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    line-height: 1.45;
+  }}
+  .sb-customer .sb-email {{
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11.5px;
+    color: {DUBLY_ACCENT};
+    word-break: break-all;
+  }}
+  .sb-customer .sb-meta {{
+    color: {DUBLY_MUTED}; font-size: 12px; margin-top: 2px;
+  }}
+  .sb-pill {{
+    display: inline-block;
+    padding: 1px 8px; border-radius: 999px;
+    font-size: 10.5px; font-weight: 600;
+    letter-spacing: 0.4px; text-transform: uppercase;
+    margin-right: 4px;
+  }}
+  .sb-pill-free   {{ background: #FEF3C7; color: #92400E; }}
+  .sb-pill-starter{{ background: #DBEAFE; color: #1E40AF; }}
+  .sb-pill-pro    {{ background: #E0E7FF; color: #3730A3; }}
+
+  /* ---------- Chat-Input ---------- */
+  div[data-testid="stChatInput"] {{
+    border-radius: 16px !important;
+    border: 1px solid {DUBLY_BORDER} !important;
+    background: {DUBLY_CARD} !important;
+    box-shadow: 0 4px 16px -4px rgba(10,10,15,0.06) !important;
+  }}
+  div[data-testid="stChatInput"] textarea {{
+    border-radius: 14px !important;
+    border: none !important;
+    font-size: 15px !important;
+  }}
+  div[data-testid="stChatInput"] textarea:focus {{
+    box-shadow: none !important;
   }}
 
-  /* Chat-Input */
-  .stChatInputContainer textarea {{
-    border-radius: 12px !important;
-    border: 1px solid {DUBLY_BORDER} !important;
+  /* ---------- Footer ---------- */
+  .dubly-footer {{
+    margin-top: 28px; padding-top: 18px;
+    border-top: 1px solid {DUBLY_BORDER};
+    font-size: 11.5px; color: {DUBLY_SUBTLE};
+    text-align: center; line-height: 1.6;
   }}
-  .stChatInputContainer textarea:focus {{
-    border-color: {DUBLY_ACCENT} !important;
-    box-shadow: 0 0 0 3px rgba(124, 92, 255, 0.12) !important;
-  }}
+  .dubly-footer a {{ color: {DUBLY_MUTED}; text-decoration: none; }}
+  .dubly-footer a:hover {{ color: {DUBLY_ACCENT}; }}
 </style>
 """, unsafe_allow_html=True)
 
-# Hero / Header
+# ---------- Hero ----------
 st.markdown(f"""
 <div class="dubly-hero">
   <div class="dubly-logo-row">
     <img class="dubly-logo" src="{DUBLY_LOGO_URL}" alt="Dubly.AI" />
-    <span class="demo-badge">Demo Mode</span>
+    <span class="demo-badge"><span class="pulse"></span> Demo</span>
   </div>
-  <h1>Support-Assistent</h1>
-  <p class="sub">Teste den KI-Chatbot mit echten Help-Center-Inhalten,
-  fünf Mock-Kunden und voller Plain-Anbindung.
-  Aktionen werden im Demo-Modus automatisch bestätigt.</p>
+  <h1>Hi, ich bin Dubly's<br/>KI-Support-Assistent.</h1>
+  <p class="sub">
+    Ich beantworte Fragen rund um Übersetzungen, Abo &amp; Pricing, schaue
+    in deinen Account, und melde dich bei einem Menschen wenn's wichtig
+    wird. Probier mich aus — alle Daten sind fiktiv.
+  </p>
   <div class="trust-row">
     <span>✓ Made in Germany</span>
+    <span class="dot"></span>
     <span>✓ GDPR-konform</span>
-    <span>✓ Session {_session_id()}</span>
+    <span class="dot"></span>
+    <span>Session {_session_id()}</span>
   </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Sidebar: Demo-Hinweis + Mock-Kunden
+# ---------- Sidebar ----------
+MOCK_CUSTOMER_DISPLAY = [
+    ("lisa.bauer@beispiel.de", "Lisa Bauer", "free", "Neu, 1 Test-Credit, keine Übersetzungen"),
+    ("marco.rossi@example.com", "Marco Rossi", "free", "Test-Credit verbraucht, 1 Dub gemacht"),
+    ("sarah.klein@beispiel.de", "Sarah Klein", "starter", "Paid, nur noch 8/100 Credits"),
+    ("alex.chen@example.com", "Alex Chen", "pro", "Letzter Lip-Sync fehlgeschlagen"),
+    ("marie.lefevre@example.com", "Marie Lefèvre", "pro", "Power-User, Job läuft gerade"),
+]
+
 with st.sidebar:
-    st.markdown("### Was kann ich hier testen?")
+    st.markdown("### Was diese Demo kann")
     st.markdown(
-        "- **Sachfragen** (z.B. *How do I export SRT?*)\n"
-        "- **Account-Fragen** mit Mock-Email\n"
-        "- **Eskalationen** (Refund, Beschwerde)\n"
-        "- **Actions** (Trial-Credits, Job-Restart)\n"
+        "Volles Bot-Verhalten mit Help-Center-Wissen, Account-Lookups, "
+        "Plain-Tickets und Aktionen. Aktionen werden im Demo-Modus auto-bestätigt.",
+        help="Im Produktiv-Bot würde jede Aktion eine Bestätigung erfordern.",
     )
-    st.markdown("### Test-Kunden (5 Mock-Profile)")
+
+    st.markdown("### Test-Kunden")
+    for email, name, plan, descr in MOCK_CUSTOMER_DISPLAY:
+        pill_class = f"sb-pill-{plan}"
+        plan_label = {"free": "Free", "starter": "Starter", "pro": "Pro"}[plan]
+        st.markdown(f"""
+        <div class="sb-customer">
+          <div><span class="sb-pill {pill_class}">{plan_label}</span> <strong>{name}</strong></div>
+          <div class="sb-email">{email}</div>
+          <div class="sb-meta">{descr}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("### Feedback")
     st.markdown(
-        "- `lisa.bauer@beispiel.de` — neu, 1 Test-Credit\n"
-        "- `marco.rossi@example.com` — Credit verbraucht\n"
-        "- `sarah.klein@beispiel.de` — Starter, Credits knapp\n"
-        "- `alex.chen@example.com` — Pro, failed Lipsync\n"
-        "- `marie.lefevre@example.com` — Pro, Power-User\n"
+        "Unter jeder Bot-Antwort findest du drei Knöpfe: 👍 hilfreich, "
+        "👎 nicht hilfreich, 🐛 Fehler melden. Negatives Feedback landet "
+        "zusätzlich als Thread in unserem Plain-Helpdesk."
     )
-    st.markdown("---")
-    st.markdown("**Feedback ist eingebaut** — unter jeder Bot-Antwort drei Buttons:")
-    st.markdown("👍 hilfreich · 👎 nicht hilfreich · 🐛 Fehler melden")
-    if st.button("Konversation neu starten"):
-        for k in ["messages", "tool_trails", "feedback_open"]:
+
+    st.markdown("### Aktionen")
+    if st.button("Konversation zurücksetzen", use_container_width=True):
+        for k in ["messages", "tool_trails", "feedback_open",
+                  "feedback_given", "starter_clicked"]:
             st.session_state.pop(k, None)
         st.rerun()
 
@@ -1134,20 +1319,60 @@ if load_mock_db() is None:
     st.stop()
 
 
+# ---------- Welcome State (nur wenn Konversation leer) ----------
+STARTER_PROMPTS = [
+    ("🎬", "Wie funktioniert die Trial?",
+     "Wie funktioniert die kostenlose Trial bei Dubly?"),
+    ("⚙️", "Mein Lip-Sync ist gefailed",
+     "Hi, ich bin alex.chen@example.com — mein letzter Lip-Sync ist fehlgeschlagen. Was ist los?"),
+    ("💳", "Was kosten die Pläne?",
+     "Was kosten die verschiedenen Abo-Pläne? Was ist der Unterschied zwischen Starter und Pro?"),
+    ("🚨", "Refund anfragen",
+     "sarah.klein@beispiel.de — Ich möchte mein Abo kündigen und eine Rückerstattung."),
+]
+
+if not st.session_state.messages:
+    st.markdown(
+        f'<div class="welcome-eyebrow">Starte hier</div>'
+        f'<h2 class="welcome-title">Worum geht es?</h2>'
+        f'<p class="welcome-sub">'
+        f"Klick auf eine typische Frage zum Reinkommen, oder schreib"
+        f" einfach unten in den Chat. Du kannst dich als einer unserer"
+        f" Test-Kunden ausgeben (Sidebar) — der Bot zeigt dir dann"
+        f" personalisierte Antworten."
+        f"</p>",
+        unsafe_allow_html=True,
+    )
+    st.markdown('<div class="starter-grid">', unsafe_allow_html=True)
+    cols = st.columns(2, gap="small")
+    for i, (icon, title, prompt_text) in enumerate(STARTER_PROMPTS):
+        with cols[i % 2]:
+            if st.button(
+                f"{icon}  {title}\n{prompt_text[:54]}{'…' if len(prompt_text)>54 else ''}",
+                key=f"starter_{i}",
+                use_container_width=True,
+            ):
+                st.session_state.starter_clicked = prompt_text
+                st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
 # Existierende Messages rendern
 for i, msg in enumerate(st.session_state.messages):
     _render_msg(i, msg)
 
-# Input
-prompt = st.chat_input("Stell eine Frage wie ein echter Kunde…")
+# Input — chat_input UND starter-clicked beide moeglich
+prompt = st.chat_input("Stell deine Frage…")
+if not prompt and "starter_clicked" in st.session_state:
+    prompt = st.session_state.pop("starter_clicked")
+
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user", avatar="🧑"):
         st.markdown(prompt)
     # Tool-Loop laufen lassen
-    with st.chat_message("assistant", avatar="🟧"):
+    with st.chat_message("assistant", avatar="💬"):
         placeholder = st.empty()
-        placeholder.markdown("_Bot denkt nach…_")
+        placeholder.markdown("_Einen Moment, ich schaue nach…_")
         # Konversation fuer API: nur strings als content
         api_conv = []
         for m in st.session_state.messages[:-1]:  # ohne letzte (das ist der Prompt)
@@ -1165,3 +1390,12 @@ if prompt:
         new_idx = len(st.session_state.messages) - 1
         st.session_state.tool_trails[new_idx] = trail
     st.rerun()
+
+# ---------- Footer ----------
+st.markdown("""
+<div class="dubly-footer">
+  Powered by Claude · Built with the Claude Agent SDK<br/>
+  Diese Demo verwendet ausschließlich fiktive Test-Daten.
+  Feedback &amp; Bug-Reports landen direkt im Dubly-Helpdesk.
+</div>
+""", unsafe_allow_html=True)
