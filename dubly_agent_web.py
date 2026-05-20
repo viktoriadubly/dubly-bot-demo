@@ -805,15 +805,30 @@ SYSTEM_PROMPT_BASE = """Du bist der KI-Support-Assistent von Dubly.AI -- einer S
 # SPRACH-REGEL (WICHTIGSTE REGEL, NIEMALS BRECHEN)
 Antworte IMMER in der Sprache der LETZTEN User-Nachricht. NICHT relevant: Email-Domain, Name des Kunden, was du frueher geantwortet hast. NUR die aktuelle Nachricht zaehlt.
 
-# HELP-CENTER-LINK IST PFLICHT (auch wichtig, nicht vergessen)
+# SACHFRAGEN -> IMMER ZUERST search_knowledge_base (zwei harte Regeln)
+
+REGEL 1 (anti-halluzination):
+Bei JEDER Frage zu UI-Bedienung, Buttons, Schritten, Features, Preisen,
+Sprachen, Limits, Refund/Cancel, oder anderen DUBLY-spezifischen Fakten:
+MUSS du in diesem Turn search_knowledge_base aufrufen, BEVOR du
+antwortest. Du darfst Buttons/Menus/UI-Schritte NICHT aus dem Gedaechtnis
+beschreiben -- auch wenn's sich plausibel anfuehlt. Wenn das Help Center
+keinen guten Treffer hat (Score < 0.55), sagst du ehrlich "das kann ich
+nicht eindeutig beantworten" und eskalierst.
+
+REGEL 2 (link ist pflicht):
 Wenn search_knowledge_base einen Treffer mit Score >= 0.55 geliefert hat,
 MUSS dieser Treffer in deiner Antwort als Markdown-Link erscheinen.
 Format: "[Beschreibender Linktitel](URL)". Nicht "Klick hier", nicht
-"Quelle", sondern eine sprechende Beschreibung was den User dort
-erwartet ("Schritt-fuer-Schritt-Export-Anleitung", "Plan-Uebersicht").
+"Quelle", sondern eine sprechende Beschreibung.
 Maximal 1 Link pro Antwort, der relevanteste.
-Bei Score < 0.55: KEIN Link erfinden, ehrlich sagen "weiss ich nicht"
-und eskalieren.
+
+Beispiel-Trajektorie:
+User: "Kann ich das Timing aendern?"
+Du:   [search_knowledge_base(query='Segment-Timing anpassen Editor')]
+Du:   Antwort basiert NUR auf was im Retrieval steht, mit Link am Ende.
+       Niemals "ich glaube du kannst die Raender ziehen" oder aehnliches
+       wenn das nicht so im Treffer steht.
 
 # DEIN CHARAKTER
 - Geduzt im Deutschen, "you" im Englischen. Niemals "Sie".
@@ -1446,19 +1461,31 @@ st.markdown(f"""
   }}
 
   /* ---------- Action-Chip-Buttons (unter Bot-Antworten) ---------- */
-  /* Alle Buttons in den Action-Row Spalten kompakter, pill-shaped, dezent */
   div[data-testid="stChatMessage"] .stButton > button {{
-    padding: 5px 12px !important;
+    padding: 6px 14px !important;
     font-size: 12.5px !important;
     font-weight: 500 !important;
     line-height: 1.2 !important;
-    min-height: 30px !important;
+    min-height: 32px !important;
     border-radius: 8px !important;
     border: 1px solid {DUBLY_BORDER} !important;
     background: {DUBLY_CARD} !important;
     color: {DUBLY_MUTED} !important;
     transition: all 0.15s ease;
     white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    width: auto !important;
+  }}
+  /* Inner-Wrapper (Streamlit packt Text manchmal in div/p) */
+  div[data-testid="stChatMessage"] .stButton > button div,
+  div[data-testid="stChatMessage"] .stButton > button p,
+  div[data-testid="stChatMessage"] .stButton > button span {{
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    margin: 0 !important;
+    line-height: 1.2 !important;
   }}
   div[data-testid="stChatMessage"] .stButton > button:hover:not(:disabled) {{
     border-color: {DUBLY_ACCENT} !important;
@@ -1469,7 +1496,6 @@ st.markdown(f"""
     opacity: 0.45;
     color: {DUBLY_SUBTLE} !important;
   }}
-  /* Disabled-State von gewaehlter Rating-Button: leicht hervorgehoben */
   div[data-testid="stChatMessage"] .stButton > button[disabled]:not([data-baseweb]) {{
     background: #F4F4F6 !important;
     border-color: {DUBLY_BORDER} !important;
@@ -1707,7 +1733,9 @@ def _render_msg(i: int, msg: dict) -> None:
         if role == "assistant":
             already = st.session_state.feedback_given.get(i)
             # Eine Zeile mit 5 kompakten Chips + Spacer
-            cols = st.columns([1, 1, 1, 1.6, 1.4, 5], gap="small")
+            # Ratings (Icon-only) schmal, Action-Buttons (Text) breit genug
+            # damit der Label-Text auf einer Zeile passt.
+            cols = st.columns([0.7, 0.7, 0.7, 2.2, 2.6, 2.5], gap="small")
             with cols[0]:
                 if st.button("👍", key=f"fb_up_{i}",
                              disabled=already is not None,
